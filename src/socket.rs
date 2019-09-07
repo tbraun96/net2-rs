@@ -17,8 +17,7 @@ use libc::c_int;
 #[cfg(windows)]
 use winapi::ctypes::c_int;
 
-use sys;
-use sys::c;
+use crate::sys::{self, c};
 
 pub struct Socket {
     inner: sys::Socket,
@@ -26,26 +25,26 @@ pub struct Socket {
 
 impl Socket {
     pub fn new(family: c_int, ty: c_int) -> io::Result<Socket> {
-        Ok(Socket { inner: try!(sys::Socket::new(family, ty)) })
+        Ok(Socket { inner: sys::Socket::new(family, ty)? })
     }
 
     pub fn bind(&self, addr: &SocketAddr) -> io::Result<()> {
         let (addr, len) = addr2raw(addr);
         unsafe {
-            ::cvt(c::bind(self.inner.raw(), addr, len as c::socklen_t)).map(|_| ())
+            crate::cvt(c::bind(self.inner.raw(), addr, len as c::socklen_t)).map(|_| ())
         }
     }
 
     pub fn listen(&self, backlog: i32) -> io::Result<()> {
         unsafe {
-            ::cvt(c::listen(self.inner.raw(), backlog)).map(|_| ())
+            crate::cvt(c::listen(self.inner.raw(), backlog)).map(|_| ())
         }
     }
 
     pub fn connect(&self, addr: &SocketAddr) -> io::Result<()> {
         let (addr, len) = addr2raw(addr);
         unsafe {
-            ::cvt(c::connect(self.inner.raw(), addr, len)).map(|_| ())
+            crate::cvt(c::connect(self.inner.raw(), addr, len)).map(|_| ())
         }
     }
 
@@ -53,9 +52,9 @@ impl Socket {
         unsafe {
             let mut storage: c::sockaddr_storage = mem::zeroed();
             let mut len = mem::size_of_val(&storage) as c::socklen_t;
-            try!(::cvt(c::getsockname(self.inner.raw(),
+            crate::cvt(c::getsockname(self.inner.raw(),
                                       &mut storage as *mut _ as *mut _,
-                                      &mut len)));
+                                      &mut len))?;
             raw2addr(&storage, len)
         }
     }
@@ -67,19 +66,19 @@ impl fmt::Debug for Socket {
     }
 }
 
-impl ::AsInner for Socket {
+impl crate::AsInner for Socket {
     type Inner = sys::Socket;
     fn as_inner(&self) -> &sys::Socket { &self.inner }
 }
 
-impl ::FromInner for Socket {
+impl crate::FromInner for Socket {
     type Inner = sys::Socket;
     fn from_inner(sock: sys::Socket) -> Socket {
         Socket { inner: sock }
     }
 }
 
-impl ::IntoInner for Socket {
+impl crate::IntoInner for Socket {
     type Inner = sys::Socket;
     fn into_inner(self) -> sys::Socket { self.inner }
 }
@@ -106,7 +105,7 @@ fn raw2addr(storage: &c::sockaddr_storage, len: c::socklen_t) -> io::Result<Sock
                                        (bits >> 16) as u8,
                                        (bits >> 8) as u8,
                                        bits as u8);
-                Ok(SocketAddr::V4(SocketAddrV4::new(ip, ::ntoh((*sa).sin_port))))
+                Ok(SocketAddr::V4(SocketAddrV4::new(ip, crate::ntoh((*sa).sin_port))))
             }
         }
         c::AF_INET6 => {
@@ -132,7 +131,7 @@ fn raw2addr(storage: &c::sockaddr_storage, len: c::socklen_t) -> io::Result<Sock
                 #[cfg(not(windows))] let sin6_scope_id = (*sa).sin6_scope_id;
 
                 Ok(SocketAddr::V6(SocketAddrV6::new(ip,
-                                                    ::ntoh((*sa).sin6_port),
+                                                    crate::ntoh((*sa).sin6_port),
                                                     (*sa).sin6_flowinfo,
                                                     sin6_scope_id)))
             }

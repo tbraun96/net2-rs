@@ -13,21 +13,23 @@ use std::io;
 use std::mem;
 use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::os::unix::io::FromRawFd;
-use libc::{self, c_int};
+use crate::libc::{self, c_int};
 #[cfg(not(any(target_os = "solaris", target_os = "emscripten")))]
-use libc::{ioctl, FIOCLEX};
+use crate::libc::{ioctl, FIOCLEX};
 
 mod impls;
 
 pub mod c {
-    pub use libc::*;
+    pub use crate::libc::*;
+    #[cfg(windows)]
+    use crate::winapi::shared::inaddr::in_addr;
 
     pub fn sockaddr_in_u32(sa: &sockaddr_in) -> u32 {
-        ::ntoh((*sa).sin_addr.s_addr)
+        crate::ntoh((*sa).sin_addr.s_addr)
     }
 
     pub fn in_addr_to_u32(addr: &in_addr) -> u32 {
-        ::ntoh(addr.s_addr)
+        crate::ntoh(addr.s_addr)
     }
 }
 
@@ -43,16 +45,16 @@ impl Socket {
             // avoiding a race with another thread running fork/exec between
             // socket() and ioctl()
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            match ::cvt(libc::socket(family, ty | libc::SOCK_CLOEXEC, 0)) {
+            match crate::cvt(libc::socket(family, ty | libc::SOCK_CLOEXEC, 0)) {
                 Ok(fd) => return Ok(Socket { fd: fd }),
                 // Older versions of Linux return EINVAL; fall back to ioctl
                 Err(ref e) if e.raw_os_error() == Some(libc::EINVAL) => {}
                 Err(e) => return Err(e),
             }
 
-            let fd = try!(::cvt(libc::socket(family, ty, 0)));
+            let fd = crate::cvt(libc::socket(family, ty, 0))?;
             ioctl(fd, FIOCLEX);
-            Ok(Socket { fd: fd })
+            Ok(Socket { fd })
         }
     }
 
@@ -61,9 +63,9 @@ impl Socket {
     #[cfg(any(target_os = "solaris", target_os = "emscripten"))]
     pub fn new(family: c_int, ty: c_int) -> io::Result<Socket> {
         unsafe {
-            let fd = try!(::cvt(libc::socket(family, ty, 0)));
+            let fd = crate::cvt(libc::socket(family, ty, 0))?;
             libc::fcntl(fd, libc::FD_CLOEXEC);
-            Ok(Socket { fd: fd })
+            Ok(Socket { fd })
         }
     }
 
@@ -88,10 +90,11 @@ impl Socket {
     }
 }
 
-impl ::FromInner for Socket {
+
+impl crate::FromInner for Socket {
     type Inner = c_int;
     fn from_inner(fd: c_int) -> Socket {
-        Socket { fd: fd }
+        Socket { fd}
     }
 }
 

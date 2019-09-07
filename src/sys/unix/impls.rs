@@ -9,11 +9,11 @@
 // except according to those terms.
 
 use std::os::unix::io::{FromRawFd, AsRawFd};
-use libc::c_int;
+use crate::libc::c_int;
 
-use {TcpBuilder, UdpBuilder, FromInner, AsInner};
-use socket::Socket;
-use sys;
+use crate::{TcpBuilder, UdpBuilder, FromInner, AsInner};
+use crate::socket::Socket;
+use crate::sys;
 
 impl FromRawFd for TcpBuilder {
     unsafe fn from_raw_fd(fd: c_int) -> TcpBuilder {

@@ -13,6 +13,7 @@ use std::os::unix::io::{FromRawFd, AsRawFd};
 use {TcpBuilder, UdpBuilder, FromInner, AsInner};
 use socket::Socket;
 use sys;
+use crate::{TcpBuilder, sys, FromInner, AsInner, UdpBuilder};
 
 impl FromRawFd for TcpBuilder {
     unsafe fn from_raw_fd(fd: usize) -> TcpBuilder {

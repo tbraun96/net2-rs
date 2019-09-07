@@ -1,10 +1,10 @@
 //! Unix-specific extensions to the `std::net` types.
 
 use std::io;
-use sys::c::{self, c_int};
+use crate::sys::c::{self, c_int};
 
-use {TcpBuilder, UdpBuilder};
-use ext::{self, AsSock};
+use crate::{TcpBuilder, UdpBuilder};
+use crate::ext::{self, AsSock};
 
 /// Unix-specific extensions for the `TcpBuilder` type in this library.
 pub trait UnixTcpBuilderExt {

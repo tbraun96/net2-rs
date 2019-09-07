@@ -13,9 +13,10 @@ use std::io;
 use std::net::{SocketAddr, ToSocketAddrs, TcpListener, TcpStream};
 use std::fmt;
 
-use IntoInner;
-use socket::Socket;
-use sys::c;
+use crate::socket::Socket;
+use crate::sys::c;
+
+use crate::IntoInner;
 
 /// An "in progress" TCP socket which has not yet been connected or listened.
 ///
@@ -31,7 +32,7 @@ impl TcpBuilder {
     /// Note that passing other kinds of flags or arguments can be done through
     /// the `FromRaw{Fd,Socket}` implementation.
     pub fn new_v4() -> io::Result<TcpBuilder> {
-        Socket::new(c::AF_INET, c::SOCK_STREAM).map(::FromInner::from_inner)
+        Socket::new(c::AF_INET, c::SOCK_STREAM).map(crate::FromInner::from_inner)
     }
 
     /// Constructs a new TcpBuilder with the `AF_INET6` domain, the `SOCK_STREAM`
@@ -40,7 +41,7 @@ impl TcpBuilder {
     /// Note that passing other kinds of flags or arguments can be done through
     /// the `FromRaw{Fd,Socket}` implementation.
     pub fn new_v6() -> io::Result<TcpBuilder> {
-        Socket::new(c::AF_INET6, c::SOCK_STREAM).map(::FromInner::from_inner)
+        Socket::new(c::AF_INET6, c::SOCK_STREAM).map(crate::FromInner::from_inner)
     }
 
     /// Binds this socket to the specified address.
@@ -51,7 +52,7 @@ impl TcpBuilder {
         where T: ToSocketAddrs
     {
         self.with_socket(|sock| {
-            let addr = try!(::one_addr(addr));
+            let addr = crate::one_addr(addr)?;
             sock.bind(&addr)
         }).map(|()| self)
     }
@@ -85,7 +86,7 @@ impl TcpBuilder {
         self.with_socket(|sock| {
             let err = io::Error::new(io::ErrorKind::Other,
                                      "no socket addresses resolved");
-            try!(addr.to_socket_addrs()).fold(Err(err), |prev, addr| {
+            addr.to_socket_addrs()?.fold(Err(err), |prev, addr| {
                 prev.or_else(|_| sock.connect(&addr))
             })
         }).and_then(|()| {
@@ -148,12 +149,12 @@ impl fmt::Debug for TcpBuilder {
     }
 }
 
-impl ::AsInner for TcpBuilder {
+impl crate::AsInner for TcpBuilder {
     type Inner = RefCell<Option<Socket>>;
     fn as_inner(&self) -> &RefCell<Option<Socket>> { &self.socket }
 }
 
-impl ::FromInner for TcpBuilder {
+impl crate::FromInner for TcpBuilder {
     type Inner = Socket;
     fn from_inner(sock: Socket) -> TcpBuilder {
         TcpBuilder { socket: RefCell::new(Some(sock)) }

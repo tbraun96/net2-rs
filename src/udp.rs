@@ -13,9 +13,9 @@ use std::fmt;
 use std::io;
 use std::net::{ToSocketAddrs, UdpSocket};
 
-use IntoInner;
-use socket::Socket;
-use sys::c;
+use crate::socket::Socket;
+use crate::sys::c;
+use crate::IntoInner;
 
 /// An "in progress" UDP socket which has not yet been connected.
 ///
@@ -31,7 +31,7 @@ impl UdpBuilder {
     /// Note that passing other kinds of flags or arguments can be done through
     /// the `FromRaw{Fd,Socket}` implementation.
     pub fn new_v4() -> io::Result<UdpBuilder> {
-        Socket::new(c::AF_INET, c::SOCK_DGRAM).map(::FromInner::from_inner)
+        Socket::new(c::AF_INET, c::SOCK_DGRAM).map(crate::FromInner::from_inner)
     }
 
     /// Constructs a new UdpBuilder with the `AF_INET6` domain, the `SOCK_DGRAM`
@@ -40,7 +40,7 @@ impl UdpBuilder {
     /// Note that passing other kinds of flags or arguments can be done through
     /// the `FromRaw{Fd,Socket}` implementation.
     pub fn new_v6() -> io::Result<UdpBuilder> {
-        Socket::new(c::AF_INET6, c::SOCK_DGRAM).map(::FromInner::from_inner)
+        Socket::new(c::AF_INET6, c::SOCK_DGRAM).map(crate::FromInner::from_inner)
     }
 
     /// Binds this socket to the specified address.
@@ -50,10 +50,10 @@ impl UdpBuilder {
     pub fn bind<T>(&self, addr: T) -> io::Result<UdpSocket>
         where T: ToSocketAddrs
     {
-        try!(self.with_socket(|sock| {
-            let addr = try!(::one_addr(addr));
-            sock.bind(&addr)
-        }));
+        self.with_socket(|sock| {
+            let addr = crate::one_addr(addr);
+            sock.bind(&addr?)
+        })?;
         Ok(self.socket.borrow_mut().take().unwrap().into_inner().into_udp_socket())
     }
 
@@ -75,12 +75,12 @@ impl fmt::Debug for UdpBuilder {
     }
 }
 
-impl ::AsInner for UdpBuilder {
+impl crate::AsInner for UdpBuilder {
     type Inner = RefCell<Option<Socket>>;
     fn as_inner(&self) -> &RefCell<Option<Socket>> { &self.socket }
 }
 
-impl ::FromInner for UdpBuilder {
+impl crate::FromInner for UdpBuilder {
     type Inner = Socket;
     fn from_inner(sock: Socket) -> UdpBuilder {
         UdpBuilder { socket: RefCell::new(Some(sock)) }

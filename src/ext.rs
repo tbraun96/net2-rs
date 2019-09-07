@@ -15,10 +15,8 @@ use std::mem;
 use std::net::{TcpStream, TcpListener, UdpSocket, Ipv4Addr, Ipv6Addr};
 use std::net::ToSocketAddrs;
 
-use {TcpBuilder, UdpBuilder, FromInner};
-use sys;
-use sys::c;
-use socket;
+use crate::{sys, TcpBuilder, UdpBuilder, FromInner};
+use crate::sys::c;
 
 cfg_if! {
     if #[cfg(any(target_os = "dragonfly",
@@ -46,7 +44,16 @@ use std::time::Duration;
 #[cfg(target_os = "wasi")] pub type Socket = std::os::wasi::io::RawFd;
 #[cfg(windows)] pub type Socket = SOCKET;
 #[cfg(windows)] use std::os::windows::prelude::*;
-#[cfg(any(windows, target_os = "wasi"))] use sys::c::*;
+#[cfg(any(windows, target_os = "wasi"))] use crate::sys::c::*;
+#[cfg(windows)]
+use crate::winapi::shared::inaddr::{in_addr, in_addr_S_un};
+#[cfg(windows)]
+use crate::winapi::um::winsock2::{ioctlsocket, linger, WSAIoctl};
+
+#[cfg(windows)]
+use crate::winapi::shared::minwindef::DWORD;
+#[cfg(windows)]
+use crate::winapi::shared::ws2def::IPPROTO;
 
 #[cfg(windows)] const SIO_KEEPALIVE_VALS: DWORD = 0x98000004;
 #[cfg(windows)]
@@ -73,8 +80,8 @@ pub fn set_opt<T: Copy>(sock: Socket, opt: c_int, val: c_int,
         let payload = &payload as *const T as *const c_void;
         #[cfg(target_os = "redox")]
         let sock = sock as c_int;
-        try!(::cvt(setsockopt(sock, opt, val, payload as *const _,
-                              mem::size_of::<T>() as socklen_t)));
+        crate::cvt(setsockopt(sock, opt, val, payload as *const _,
+                              mem::size_of::<T>() as socklen_t))?;
     }
     Ok(())
 }
@@ -90,9 +97,9 @@ pub fn get_opt<T: Copy>(sock: Socket, opt: c_int, val: c_int) -> io::Result<T> {
         let mut len = mem::size_of::<T>() as socklen_t;
         #[cfg(target_os = "redox")]
         let sock = sock as c_int;
-        try!(::cvt(getsockopt(sock, opt, val,
+        crate::cvt(getsockopt(sock, opt, val,
                               &mut slot as *mut _ as *mut _,
-                              &mut len)));
+                              &mut len))?;
         assert_eq!(len as usize, mem::size_of::<T>());
         Ok(slot)
     }
@@ -715,47 +722,47 @@ impl TcpStreamExt for TcpStream {
 
     #[cfg(target_os = "redox")]
     fn set_keepalive_ms(&self, keepalive: Option<u32>) -> io::Result<()> {
-        try!(set_opt(self.as_sock(), SOL_SOCKET, SO_KEEPALIVE,
-                    keepalive.is_some() as c_int));
+        set_opt(self.as_sock(), SOL_SOCKET, SO_KEEPALIVE,
+                    keepalive.is_some() as c_int)?;
         if let Some(dur) = keepalive {
-            try!(set_opt(self.as_sock(), v(IPPROTO_TCP), KEEPALIVE_OPTION,
-                        (dur / 1000) as c_int));
+            set_opt(self.as_sock(), v(IPPROTO_TCP), KEEPALIVE_OPTION,
+                        (dur / 1000) as c_int)?;
         }
         Ok(())
     }
 
     #[cfg(target_os = "redox")]
     fn keepalive_ms(&self) -> io::Result<Option<u32>> {
-        let keepalive = try!(get_opt::<c_int>(self.as_sock(), SOL_SOCKET,
-                                             SO_KEEPALIVE));
+        let keepalive = get_opt::<c_int>(self.as_sock(), SOL_SOCKET,
+                                             SO_KEEPALIVE)?;
         if keepalive == 0 {
             return Ok(None)
         }
-        let secs = try!(get_opt::<c_int>(self.as_sock(), v(IPPROTO_TCP),
-                                        KEEPALIVE_OPTION));
+        let secs = get_opt::<c_int>(self.as_sock(), v(IPPROTO_TCP),
+                                        KEEPALIVE_OPTION)?;
         Ok(Some((secs as u32) * 1000))
     }
 
     #[cfg(unix)]
     fn set_keepalive_ms(&self, keepalive: Option<u32>) -> io::Result<()> {
-        try!(set_opt(self.as_sock(), SOL_SOCKET, SO_KEEPALIVE,
-                    keepalive.is_some() as c_int));
+        set_opt(self.as_sock(), SOL_SOCKET, SO_KEEPALIVE,
+                    keepalive.is_some() as c_int)?;
         if let Some(dur) = keepalive {
-            try!(set_opt(self.as_sock(), v(IPPROTO_TCP), KEEPALIVE_OPTION,
-                        (dur / 1000) as c_int));
+            set_opt(self.as_sock(), v(IPPROTO_TCP), KEEPALIVE_OPTION,
+                        (dur / 1000) as c_int)?;
         }
         Ok(())
     }
 
     #[cfg(unix)]
     fn keepalive_ms(&self) -> io::Result<Option<u32>> {
-        let keepalive = try!(get_opt::<c_int>(self.as_sock(), SOL_SOCKET,
-                                             SO_KEEPALIVE));
+        let keepalive = get_opt::<c_int>(self.as_sock(), SOL_SOCKET,
+                                             SO_KEEPALIVE)?;
         if keepalive == 0 {
             return Ok(None)
         }
-        let secs = try!(get_opt::<c_int>(self.as_sock(), v(IPPROTO_TCP),
-                                        KEEPALIVE_OPTION));
+        let secs = get_opt::<c_int>(self.as_sock(), v(IPPROTO_TCP),
+                                        KEEPALIVE_OPTION)?;
         Ok(Some((secs as u32) * 1000))
     }
 
@@ -778,7 +785,7 @@ impl TcpStreamExt for TcpStream {
             keepaliveinterval: ms as c_ulong,
         };
         unsafe {
-            ::cvt_win(WSAIoctl(self.as_sock(),
+            crate::cvt_win(WSAIoctl(self.as_sock(),
                                SIO_KEEPALIVE_VALS,
                                &ka as *const _ as *mut _,
                                mem::size_of_val(&ka) as DWORD,
@@ -798,7 +805,7 @@ impl TcpStreamExt for TcpStream {
             keepaliveinterval: 0,
         };
         unsafe {
-            try!(::cvt_win(WSAIoctl(self.as_sock(),
+            crate::cvt_win(WSAIoctl(self.as_sock(),
                                     SIO_KEEPALIVE_VALS,
                                     0 as *mut _,
                                     0,
@@ -806,7 +813,7 @@ impl TcpStreamExt for TcpStream {
                                     mem::size_of_val(&ka) as DWORD,
                                     0 as *mut _,
                                     0 as *mut _,
-                                    None)));
+                                    None))?;
         }
         Ok({
             if ka.onoff == 0 {
@@ -1025,7 +1032,7 @@ impl UdpSocketExt for UdpSocket {
         set_opt(self.as_sock(), IPPROTO_IP, IP_MULTICAST_TTL,
                multicast_ttl_v4 as c_int)
     }
-    
+
     fn multicast_ttl_v4(&self) -> io::Result<u32> {
         get_opt::<c_int>(self.as_sock(), IPPROTO_IP, IP_MULTICAST_TTL)
             .map(|b| b as u32)
@@ -1201,14 +1208,14 @@ impl UdpSocketExt for UdpSocket {
     #[cfg(target_os = "redox")]
     fn send(&self, buf: &[u8]) -> io::Result<usize> {
         unsafe {
-            ::cvt(write(self.as_sock() as c_int, buf.as_ptr() as *const _, buf.len())).map(|n| n as usize)
+            crate::cvt(write(self.as_sock() as c_int, buf.as_ptr() as *const _, buf.len())).map(|n| n as usize)
         }
     }
 
     #[cfg(unix)]
     fn send(&self, buf: &[u8]) -> io::Result<usize> {
         unsafe {
-            ::cvt(send(self.as_sock() as c_int, buf.as_ptr() as *const _, buf.len(), 0)).map(|n| n as usize)
+            crate::cvt(send(self.as_sock() as c_int, buf.as_ptr() as *const _, buf.len(), 0)).map(|n| n as usize)
         }
     }
 
@@ -1233,7 +1240,7 @@ impl UdpSocketExt for UdpSocket {
         let len = ::std::cmp::min(buf.len(), c_int::max_value() as usize);
         let buf = &buf[..len];
         unsafe {
-            ::cvt(send(self.as_sock(), buf.as_ptr() as *const _, len as c_int, 0))
+            crate::cvt(send(self.as_sock(), buf.as_ptr() as *const _, len as c_int, 0))
                 .map(|n| n as usize)
         }
     }
@@ -1241,7 +1248,7 @@ impl UdpSocketExt for UdpSocket {
     #[cfg(target_os = "redox")]
     fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
         unsafe {
-            ::cvt(read(self.as_sock() as c_int, buf.as_mut_ptr() as *mut _, buf.len()))
+            crate::cvt(read(self.as_sock() as c_int, buf.as_mut_ptr() as *mut _, buf.len()))
                 .map(|n| n as usize)
         }
     }
@@ -1249,7 +1256,7 @@ impl UdpSocketExt for UdpSocket {
     #[cfg(unix)]
     fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
         unsafe {
-            ::cvt(recv(self.as_sock(), buf.as_mut_ptr() as *mut _, buf.len(), 0))
+            crate::cvt(recv(self.as_sock(), buf.as_mut_ptr() as *mut _, buf.len(), 0))
                 .map(|n| n as usize)
         }
     }
@@ -1277,7 +1284,7 @@ impl UdpSocketExt for UdpSocket {
         let len = ::std::cmp::min(buf.len(), c_int::max_value() as usize);
         let buf = &mut buf[..len];
         unsafe {
-            ::cvt(recv(self.as_sock(), buf.as_mut_ptr() as *mut _, buf.len() as c_int, 0))
+            crate::cvt(recv(self.as_sock(), buf.as_mut_ptr() as *mut _, buf.len() as c_int, 0))
                 .map(|n| n as usize)
         }
     }
@@ -1290,9 +1297,9 @@ impl UdpSocketExt for UdpSocket {
 fn do_connect<A: ToSocketAddrs>(sock: Socket, addr: A) -> io::Result<()> {
     let err = io::Error::new(io::ErrorKind::Other,
                              "no socket addresses resolved");
-    let addrs = try!(addr.to_socket_addrs());
+    let addrs = addr.to_socket_addrs()?;
     let sys = sys::Socket::from_inner(sock);
-    let sock = socket::Socket::from_inner(sys);
+    let sock = crate::socket::Socket::from_inner(sys);
     let ret = addrs.fold(Err(err), |prev, addr| {
         prev.or_else(|_| sock.connect(&addr))
     });
@@ -1302,7 +1309,7 @@ fn do_connect<A: ToSocketAddrs>(sock: Socket, addr: A) -> io::Result<()> {
 
 #[cfg(target_os = "redox")]
 fn set_nonblocking(sock: Socket, nonblocking: bool) -> io::Result<()> {
-    let mut flags = ::cvt(unsafe {
+    let mut flags = crate::cvt(unsafe {
         fcntl(sock as c_int, F_GETFL)
     })?;
     if nonblocking {
@@ -1310,7 +1317,7 @@ fn set_nonblocking(sock: Socket, nonblocking: bool) -> io::Result<()> {
     } else {
         flags &= !O_NONBLOCK;
     }
-    ::cvt(unsafe {
+    crate::cvt(unsafe {
         fcntl(sock as c_int, F_SETFL, flags)
     }).and(Ok(()))
 }
@@ -1318,7 +1325,7 @@ fn set_nonblocking(sock: Socket, nonblocking: bool) -> io::Result<()> {
 #[cfg(unix)]
 fn set_nonblocking(sock: Socket, nonblocking: bool) -> io::Result<()> {
     let mut nonblocking = nonblocking as c_ulong;
-    ::cvt(unsafe {
+    crate::cvt(unsafe {
         ioctl(sock, FIONBIO, &mut nonblocking)
     }).map(|_| ())
 }
@@ -1331,7 +1338,7 @@ fn set_nonblocking(_sock: Socket, _nonblocking: bool) -> io::Result<()> {
 #[cfg(windows)]
 fn set_nonblocking(sock: Socket, nonblocking: bool) -> io::Result<()> {
     let mut nonblocking = nonblocking as c_ulong;
-    ::cvt(unsafe {
+    crate::cvt(unsafe {
         ioctlsocket(sock, FIONBIO as c_int, &mut nonblocking)
     }).map(|_| ())
 }
@@ -1340,7 +1347,7 @@ fn set_nonblocking(sock: Socket, nonblocking: bool) -> io::Result<()> {
 fn ip2in_addr(ip: &Ipv4Addr) -> in_addr {
     let oct = ip.octets();
     in_addr {
-        s_addr: ::hton(((oct[0] as u32) << 24) |
+        s_addr: crate::hton(((oct[0] as u32) << 24) |
                        ((oct[1] as u32) << 16) |
                        ((oct[2] as u32) <<  8) |
                        ((oct[3] as u32) <<  0)),
@@ -1351,7 +1358,7 @@ fn ip2in_addr(ip: &Ipv4Addr) -> in_addr {
 fn ip2in_addr(ip: &Ipv4Addr) -> in_addr {
     let oct = ip.octets();
     in_addr {
-        s_addr: ::hton(((oct[0] as u32) << 24) |
+        s_addr: crate::hton(((oct[0] as u32) << 24) |
                        ((oct[1] as u32) << 16) |
                        ((oct[2] as u32) <<  8) |
                        ((oct[3] as u32) <<  0)),
@@ -1363,7 +1370,7 @@ fn ip2in_addr(ip: &Ipv4Addr) -> in_addr {
     let oct = ip.octets();
     unsafe {
         let mut S_un: in_addr_S_un = mem::zeroed();
-        *S_un.S_addr_mut() = ::hton(((oct[0] as u32) << 24) |
+        *S_un.S_addr_mut() = crate::hton(((oct[0] as u32) << 24) |
                                 ((oct[1] as u32) << 16) |
                                 ((oct[2] as u32) <<  8) |
                                 ((oct[3] as u32) <<  0));

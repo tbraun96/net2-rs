@@ -36,10 +36,10 @@ pub struct Socket {
 impl Socket {
     pub fn new(family: c_int, ty: c_int) -> io::Result<Socket> {
         unsafe {
-            let fd = ::cvt(libc::socket(family, ty, 0))?;
-            let mut flags = ::cvt(libc::fcntl(fd, libc::F_GETFD))?;
+            let fd = crate::cvt(libc::socket(family, ty, 0))?;
+            let mut flags = crate::cvt(libc::fcntl(fd, libc::F_GETFD))?;
             flags |= libc::O_CLOEXEC;
-            ::cvt(libc::fcntl(fd, libc::F_SETFD, flags))?;
+            crate::cvt(libc::fcntl(fd, libc::F_SETFD, flags))?;
             Ok(Socket { fd: fd })
         }
     }

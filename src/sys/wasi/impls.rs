@@ -3,10 +3,11 @@ use std::os::wasi::io::{FromRawFd, AsRawFd};
 use {TcpBuilder, UdpBuilder, FromInner, AsInner};
 use socket::Socket;
 use sys::{self, c::__wasi_fd_t};
+use crate::{TcpBuilder, FromInner, sys, UdpBuilder, AsInner};
 
 impl FromRawFd for TcpBuilder {
     unsafe fn from_raw_fd(fd: __wasi_fd_t) -> TcpBuilder {
-        let sock = sys::Socket::from_inner(fd);
+        let sock = crate::sys::Socket::from_inner(fd);
         TcpBuilder::from_inner(Socket::from_inner(sock))
     }
 }

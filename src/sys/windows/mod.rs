@@ -14,7 +14,7 @@ use std::io;
 use std::mem;
 use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::os::windows::io::{RawSocket, FromRawSocket};
-use std::sync::{Once, ONCE_INIT};
+use std::sync::Once;
 
 const HANDLE_FLAG_INHERIT: DWORD = 0x00000001;
 
@@ -40,11 +40,11 @@ pub mod c {
     pub use winapi::shared::ws2ipdef::IPV6_MREQ as ipv6_mreq;
 
     pub fn sockaddr_in_u32(sa: &sockaddr_in) -> u32 {
-        ::ntoh(unsafe { *sa.sin_addr.S_un.S_addr() })
+        crate::ntoh(unsafe { *sa.sin_addr.S_un.S_addr() })
     }
 
     pub fn in_addr_to_u32(addr: &in_addr) -> u32 {
-        ::ntoh(unsafe { *addr.S_un.S_addr() })
+        crate::ntoh(unsafe { *addr.S_un.S_addr() })
     }
 }
 
@@ -53,7 +53,7 @@ use self::c::*;
 mod impls;
 
 fn init() {
-    static INIT: Once = ONCE_INIT;
+    static INIT: Once = Once::new();
 
     INIT.call_once(|| {
         // Initialize winsock through the standard library by just creating a
@@ -70,14 +70,14 @@ pub struct Socket {
 impl Socket {
     pub fn new(family: c_int, ty: c_int) -> io::Result<Socket> {
         init();
-        let socket = try!(unsafe {
+        let socket = unsafe {
             match WSASocketW(family, ty, 0, 0 as *mut _, 0,
                              WSA_FLAG_OVERLAPPED) {
                 INVALID_SOCKET => Err(io::Error::last_os_error()),
                 n => Ok(Socket { socket: n }),
             }
-        });
-        try!(socket.set_no_inherit());
+        }?;
+        socket.set_no_inherit()?;
         Ok(socket)
     }
 
@@ -102,13 +102,13 @@ impl Socket {
     }
 
     fn set_no_inherit(&self) -> io::Result<()> {
-        ::cvt_win(unsafe {
+        crate::cvt_win(unsafe {
             SetHandleInformation(self.socket as HANDLE, HANDLE_FLAG_INHERIT, 0)
         }).map(|_| ())
     }
 }
 
-impl ::FromInner for Socket {
+impl crate::FromInner for Socket {
     type Inner = SOCKET;
     fn from_inner(socket: SOCKET) -> Socket {
         Socket { socket: socket }

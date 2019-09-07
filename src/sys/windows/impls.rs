@@ -11,13 +11,12 @@
 use std::os::windows::io::{FromRawSocket, RawSocket, AsRawSocket};
 use winapi::um::winsock2::SOCKET;
 
-use {TcpBuilder, UdpBuilder, FromInner, AsInner};
-use socket::Socket;
-use sys;
+use crate::socket::Socket;
+use crate::{sys, TcpBuilder, UdpBuilder, FromInner, AsInner};
 
 impl FromRawSocket for TcpBuilder {
     unsafe fn from_raw_socket(fd: RawSocket) -> TcpBuilder {
-        let sock = sys::Socket::from_inner(fd as SOCKET);
+        let sock = crate::sys::Socket::from_inner(fd as SOCKET);
         TcpBuilder::from_inner(Socket::from_inner(sock))
     }
 }
